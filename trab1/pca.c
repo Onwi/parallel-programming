@@ -51,9 +51,64 @@ void covariance_matrix(double data[ROWS][COLS], double cov[COLS][COLS]) {
   }
 }
 
-// TODO:
+// Jacobi method
+// src: https://en.wikipedia.org/wiki/Jacobi_eigenvalue_algorithm#Algorithm
 void PCA(double A[COLS][COLS], double eigenvalues[COLS], double eigenvectors[COLS][COLS]) {
+  // Initialize eigenvectors as identity matrix
+  for (int i = 0; i < COLS; i++) {
+    for (int j = 0; j < COLS; j++) {
+      eigenvectors[i][j] = (i == j) ? 1.0 : 0.0;
+    }
+    eigenvalues[i] = A[i][i];
+  }
 
+  for (int iter = 0; iter < MAX_ITER; iter++) {
+    // Find largest off-diagonal element
+    int p = 0, q = 1;
+    double max_val = fabs(A[p][q]);
+    for (int i = 0; i < COLS; i++) {
+      for (int j = i + 1; j < COLS; j++) {
+        if (fabs(A[i][j]) > max_val) {
+          max_val = fabs(A[i][j]);
+          p = i; q = j;
+        }
+      }
+    }
+
+    if (max_val < EPS) break; // converged
+
+    double theta = 0.5 * atan2(2*A[p][q], A[q][q] - A[p][p]);
+    double c = cos(theta);
+    double s = sin(theta);
+
+    // Update matrix A
+    double App = c*c*A[p][p] - 2*s*c*A[p][q] + s*s*A[q][q];
+    double Aqq = s*s*A[p][p] + 2*s*c*A[p][q] + c*c*A[q][q];
+    A[p][q] = A[q][p] = 0.0;
+    A[p][p] = App;
+    A[q][q] = Aqq;
+
+    for (int i = 0; i < COLS; i++) {
+      if (i != p && i != q) {
+        double Aip = c*A[i][p] - s*A[i][q];
+        double Aiq = s*A[i][p] + c*A[i][q];
+        A[i][p] = A[p][i] = Aip;
+        A[i][q] = A[q][i] = Aiq;
+      }
+    }
+
+    // Update eigenvectors
+    for (int i = 0; i < COLS; i++) {
+      double vip = c*eigenvectors[i][p] - s*eigenvectors[i][q];
+      double viq = s*eigenvectors[i][p] + c*eigenvectors[i][q];
+      eigenvectors[i][p] = vip;
+      eigenvectors[i][q] = viq;
+    }
+  }
+
+  for (int i = 0; i < COLS; i++) {
+    eigenvalues[i] = A[i][i];
+  }
 }
 
 int main() {
