@@ -20,6 +20,11 @@ unsigned int hash(unsigned int x) {
     return x;
 }
 
+/* 
+  PARALELIZAÇÃO TEMPORÁRIA PARA GERAÇÃO DE DADOS, PARA FACILITAR TESTES.
+  UTILIZAR RAND NOVAMENTE E REMOVER DIRETIVAS PARA REALIZAR OS TESTES
+  DO RELATÓRIO.
+*/
 // Generate a large synthetic dataset
 void generate_dataset() {
   // srand(SEED); // is not thread-safe
@@ -38,26 +43,45 @@ void generate_dataset() {
 
 // Function to compute mean of each column
 void mean_center(double data[ROWS][COLS]) {
+  double means[COLS];
+
   #pragma omp parallel for
   for (int j = 0; j < COLS; j++) {
     double sum = 0.0;
-
-    #pragma omp parallel for reduction(+:sum)
     for (int i = 0; i < ROWS; i++) {
       sum += data[i][j];
     }
-    double mean = sum / ROWS;
+    means[j] = sum / ROWS;
+  }
 
-    #pragma omp parallel for
-    for (int i = 0; i < ROWS; i++) {
-      data[i][j] -= mean;
+  #pragma omp parallel for collapse(2)
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLS; j++) {
+      data[i][j] -= means[j];
     }
   }
+
+  // #pragma omp parallel for
+  // for (int j = 0; j < COLS; j++) {
+  //   double sum = 0.0;
+
+  //   #pragma omp parallel for reduction(+:sum)
+  //   for (int i = 0; i < ROWS; i++) {
+  //     sum += data[i][j];
+  //   }
+  //   double mean = sum / ROWS;
+
+  //   #pragma omp parallel for
+  //   for (int i = 0; i < ROWS; i++) {
+  //     data[i][j] -= mean;
+  //   }
+  // }
 }
 
 // Compute covariance matrix (COLS x COLS)
 void covariance_matrix(double data[ROWS][COLS], double cov[COLS][COLS]) {
-  #pragma omp parallel for collapse(2)
+  // dynamic pois a computação é para j >= i, gerando um desbalanceamento da carga
+  #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < COLS; i++) {
     for (int j = i; j < COLS; j++) {
       double sum = 0.0;
@@ -75,22 +99,50 @@ void covariance_matrix(double data[ROWS][COLS], double cov[COLS][COLS]) {
 // src: https://en.wikipedia.org/wiki/Jacobi_eigenvalue_algorithm#Algorithm
 void PCA(double A[COLS][COLS], double eigenvalues[COLS], double eigenvectors[COLS][COLS]) {
   // Initialize eigenvectors as identity matrix
+  #pragma omp parallel for collapse(2)
   for (int i = 0; i < COLS; i++) {
     for (int j = 0; j < COLS; j++) {
       eigenvectors[i][j] = (i == j) ? 1.0 : 0.0;
     }
-    eigenvalues[i] = A[i][i];
+    // eigenvalues[i] = A[i][i];
   }
+
+  #pragma omp parallel for
+  for (int i = 0; i < COLS; i++) {
+    eigenvalues[i] = A[i][i];
+  }  
 
   for (int iter = 0; iter < MAX_ITER; iter++) {
     // Find largest off-diagonal element
     int p = 0, q = 1;
     double max_val = fabs(A[p][q]);
-    for (int i = 0; i < COLS; i++) {
-      for (int j = i + 1; j < COLS; j++) {
-        if (fabs(A[i][j]) > max_val) {
-          max_val = fabs(A[i][j]);
-          p = i; q = j;
+
+    #pragma omp parallel
+    {
+      // cada thread tem suas variáveis
+      int local_p = 0, local_q = 1;
+      double local_max = fabs(A[0][1]);
+      #pragma omp for collapse(2)
+      for (int i = 0; i < COLS; i++) {
+        for (int j = i + 1; j < COLS; j++) {
+          // if (fabs(A[i][j]) > max_val) {
+          if (fabs(A[i][j]) > local_max) {
+            local_max = fabs(A[i][j]);
+            // max_val = fabs(A[i][j]);
+            // p = i; q = j;
+            local_p = i; 
+            local_q = j;
+          }
+        }
+      }
+
+      // os valores compartilhados são atualizados
+      #pragma omp critical
+      {
+        if (local_max > max_val) {
+          max_val = local_max;
+          p = local_p;
+          q = local_q;
         }
       }
     }
@@ -141,12 +193,14 @@ int main() {
   printf("Generating dataset (%d x %d)...\n", ROWS, COLS);
   generate_dataset();
 
+  t_start = omp_get_wtime();
+
   printf("Mean-centering data...\n");
   mean_center(data);
 
   printf("Computing covariance matrix...\n");
   double cov[COLS][COLS];
-  t_start = omp_get_wtime();
+  
   covariance_matrix(data, cov);
   t_end = omp_get_wtime();
   printf("Covariance matrix calculation took %.4f\n", t_end - t_start);
