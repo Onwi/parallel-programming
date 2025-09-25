@@ -4,7 +4,7 @@
 #include <time.h>
 #include <omp.h>
 
-#define ROWS 50000   // number of samples
+#define ROWS 100000   // number of samples
 #define COLS 340     // number of features
 #define MAX_ITER 500
 #define EPS 1e-9

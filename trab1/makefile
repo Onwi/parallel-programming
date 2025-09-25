@@ -3,7 +3,7 @@ CFLAGS = -Wall -O2 -fopenmp
 LDFLAGS = -lm -fopenmp
 
 TARGET = pca
-SRC = pca.c
+SRC = pca_openmp.c
 
 all: $(TARGET)
 
