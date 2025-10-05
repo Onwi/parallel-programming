@@ -84,7 +84,7 @@ void covariance_matrix(double data[ROWS][COLS], double cov[COLS][COLS]) {
     for (int j = i; j < COLS; j++) {
       double sum = 0.0;
 
-      #pragma omp parallel for reduction(+:sum)
+      //#pragma omp parallel for reduction(+:sum)
       for (int k = 0; k < ROWS; k++) {
         sum += data[k][i] * data[k][j];
       }
